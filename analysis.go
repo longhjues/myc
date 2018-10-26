@@ -1,6 +1,9 @@
 package main
 
-import "unicode"
+import (
+	"fmt"
+	"unicode"
+)
 
 type analysisType int
 
@@ -17,6 +20,7 @@ const (
 
 	sWord1
 
+	sNote2
 	sNote3
 	sNote4
 	sNote5
@@ -47,10 +51,13 @@ type Analysis struct {
 func analysis(b []rune) *Analysis {
 	var a Analysis
 	a.body = b
-	a.nextPtr = -1
+	a.nextPtr = 0
 	var r = a.body[0]
-	var s analysisType
-	for s != sError && r != 0 {
+	var s = sStart
+	var i = 0
+	for r != 0 && i <= 1000 {
+		fmt.Println(i, s, r, string(r))
+		i++
 		switch s {
 		case sStart, sNotMatch, sSure:
 			s = a.sStart(r)
@@ -70,6 +77,8 @@ func analysis(b []rune) *Analysis {
 			s = a.sOp3(r)
 		case sOp4:
 			s = a.sOp4(r)
+		case sNote2:
+			s = a.sNote2(r)
 		case sNote3:
 			s = a.sNote3(r)
 		case sNote4:
@@ -78,8 +87,10 @@ func analysis(b []rune) *Analysis {
 			s = a.sNote5(r)
 		case sNote6:
 			s = a.sNote6(r)
+		case sNote7:
+			s = a.sNote7(r)
 		default:
-			panic(s)
+			panic("unknown status")
 		}
 		switch s {
 		case sNotMatch:
@@ -89,6 +100,8 @@ func analysis(b []rune) *Analysis {
 			a.sureLast()
 			a.lastPtr -= 1
 			r = a.body[0]
+		case sError:
+			panic("sError")
 		default:
 			r = a.next()
 		}
@@ -124,11 +137,11 @@ func (a *Analysis) next() rune {
 func (a *Analysis) sStart(nextChar rune) analysisType {
 	switch {
 	case isWhiteLetter(nextChar):
-		return sWhite
-	case unicode.IsLetter(nextChar):
-		return a.sWord1(nextChar)
+		return a.sWhite(nextChar)
 	case unicode.IsDigit(nextChar):
 		return a.sNum1(nextChar)
+	case unicode.IsLetter(nextChar):
+		return a.sWord1(nextChar)
 	default:
 		return a.sOp1(nextChar)
 	}
@@ -137,6 +150,7 @@ func (a *Analysis) sStart(nextChar rune) analysisType {
 func (a *Analysis) sWhite(nextChar rune) analysisType {
 	switch {
 	case isWhiteLetter(nextChar):
+		a.setLast("", "")
 		return sWhite
 	default:
 		return sNotMatch
@@ -150,8 +164,11 @@ func (a *Analysis) sWord1(nextChar rune) analysisType {
 	case unicode.IsLetter(nextChar) || unicode.IsDigit(nextChar) || nextChar == '_':
 		if keywords[string(a.body[:a.nextPtr+1])] {
 			a.setLast("keyword", string(a.body[:a.nextPtr+1]))
+			fmt.Println("keyword", string(a.body[:a.nextPtr+1]))
+			return sWord1
 		}
 		a.setLast("word", string(a.body[:a.nextPtr+1]))
+		fmt.Println("word", string(a.body[:a.nextPtr+1]))
 		return sWord1
 	default:
 		return sNotMatch
@@ -169,6 +186,7 @@ func (a *Analysis) sNum1(nextChar rune) analysisType {
 	case unicode.IsDigit(nextChar):
 		fallthrough
 	case a.body[a.nextPtr] == '_':
+		// fmt.Println("int---", string(a.body))
 		a.setLast("int", string(a.body[:a.nextPtr+1]))
 		return sNum1
 	case a.body[a.nextPtr] == '.':
@@ -187,7 +205,7 @@ func (a *Analysis) sNum3(nextChar rune) analysisType {
 	case unicode.IsDigit(nextChar):
 		fallthrough
 	case nextChar == '_':
-		a.setLast("int", string(a.body[:a.nextPtr+1]))
+		a.setLast("float", string(a.body[:a.nextPtr+1]))
 		return sNum3
 	default:
 		return sNotMatch

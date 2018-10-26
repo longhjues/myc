@@ -1,5 +1,16 @@
 package main
 
+// [^\r\n]*
+func (a *Analysis) sNote2(nextChar rune) analysisType {
+	switch {
+	case nextChar != '\r' && nextChar != '\n':
+		return sNote2
+	default:
+		a.setLast("note", string(a.body[:a.nextPtr]))
+		return a.sNote5(nextChar)
+	}
+}
+
 // -
 func (a *Analysis) sNote3(nextChar rune) analysisType {
 	switch {
@@ -20,15 +31,14 @@ func (a *Analysis) sNote4(nextChar rune) analysisType {
 	}
 }
 
-// {sNote2|sNote4}[^\r\n]*[\r\n]
+// {sNote2|sNote4}{sNote2}[\r\n]
 // note
 func (a *Analysis) sNote5(nextChar rune) analysisType {
 	switch {
 	case nextChar == '\r' || nextChar == '\n':
-		a.setLast("note", string(a.body[:a.nextPtr]))
-		return sNotMatch
+		return sNote5
 	default:
-		return sError
+		return sNotMatch
 	}
 }
 
@@ -38,7 +48,7 @@ func (a *Analysis) sNote6(nextChar rune) analysisType {
 	case nextChar == '*':
 		return sNote7
 	default:
-		return sError
+		return sNote6
 	}
 }
 
@@ -47,8 +57,8 @@ func (a *Analysis) sNote6(nextChar rune) analysisType {
 func (a *Analysis) sNote7(nextChar rune) analysisType {
 	switch {
 	case nextChar == '/':
-		a.setLast("note", string(a.body[:a.nextPtr-1]))
-		return sNotMatch
+		a.setLast("note", string(a.body[2:a.nextPtr-1]))
+		return sSure
 	default:
 		return sNote6
 	}

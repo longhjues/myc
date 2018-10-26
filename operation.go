@@ -30,7 +30,7 @@ func (a *Analysis) sOp1(nextChar rune) analysisType {
 func (a *Analysis) sOp2(nextChar rune) analysisType {
 	switch nextChar {
 	case '/':
-		return sNote5
+		return sNote2
 	case '*':
 		return sNote6
 	case '=':
