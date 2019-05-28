@@ -52,13 +52,17 @@ func (p *Parse) stmtList() AST {
 	return ASTStmt{list: list}
 }
 
-// stmt : variable (COMMA variable)* ASSIGN expr (COMMA expr)*
+// stmt : (VAR)? variable (COMMA variable)* ASSIGN expr (COMMA expr)*
 func (p *Parse) stmt() AST {
 	fmt.Println("stmt", p.t)
+	var isDefined bool
+	if p.t.Type == TokenVar {
+		p.mustEat(TokenVar)
+		isDefined = true
+	}
 	var left []ASTVariable
 	left = append(left, p.variable().(ASTVariable))
 	for p.t.Type == TokenComma {
-		fmt.Println("333333")
 		p.mustEat(TokenComma)
 		left = append(left, p.variable().(ASTVariable))
 	}
@@ -66,14 +70,14 @@ func (p *Parse) stmt() AST {
 	var right []AST
 	right = append(right, p.expr())
 	for p.t.Type == TokenComma {
-		fmt.Println("444444")
 		p.mustEat(TokenComma)
 		right = append(right, p.expr())
 	}
 	return ASTAssign{
-		left:  left,
-		op:    op,
-		right: right,
+		left:      left,
+		op:        op,
+		right:     right,
+		isDefined: isDefined,
 	}
 }
 

@@ -23,6 +23,7 @@ const (
 	TokenAssign
 	TokenComma
 	TokenColon
+	TokenVar
 )
 
 type Token struct {
@@ -145,5 +146,6 @@ func (l *Lexer) GetNextToken() *Token {
 }
 
 var KeyWords = map[string]*Token{
-	"if": {Type: TokenIf},
+	"if":  {Type: TokenIf},
+	"var": {Type: TokenVar},
 }
