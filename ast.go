@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 )
 
@@ -44,6 +45,10 @@ type Symbol struct {
 	t        string // type
 }
 
+func (s *Symbol) String() string {
+	return fmt.Sprintf("(%s:%v:%v)", s.name, s.value, s.varValue)
+}
+
 func NewSymbolTable(prev *SymbolTable) *SymbolTable {
 	return &SymbolTable{
 		prev: prev,
@@ -54,6 +59,10 @@ func NewSymbolTable(prev *SymbolTable) *SymbolTable {
 type SymbolTable struct {
 	prev *SymbolTable
 	t    map[string]*Symbol
+}
+
+func (st *SymbolTable) String() string {
+	return fmt.Sprintf("{%v\n%v}", st.t, st.prev)
 }
 
 func (st *SymbolTable) Get(name string) *Symbol {
@@ -127,10 +136,12 @@ type ExecVisitor struct {
 
 func (ev *ExecVisitor) Exec() {
 	ev.st = NewSymbolTable(nil)
+	ev.exec(ev.ast)
 	// ev.st.
 }
 
 func (ev *ExecVisitor) exec(ast AST) interface{} {
+	fmt.Println("exec:", ast)
 	switch ast := ast.(type) {
 	case ASTNumber:
 		tmp, err := strconv.Atoi(ast.num)
@@ -165,11 +176,67 @@ func (ev *ExecVisitor) exec(ast AST) interface{} {
 		}
 		return tmp.varValue
 	case ASTStmt:
-		for ast := range ast.list {
+		for _, ast := range ast.list {
 			ev.exec(ast)
 		}
 		return nil
 	case ASTAssign:
+		if ast.isDefined && ast.op != "=" {
+			panic(ast.op)
+		}
+		var right []int
+		for _, ast := range ast.right {
+			right = append(right, ev.exec(ast).(int))
+		}
+		if len(right) == 1 { // exp. var a,b,c=1
+			for i := range ast.left {
+				if ast.isDefined {
+					ev.st.DefinedVar(ast.left[i].name, right[0])
+				} else if ast.op == "=" {
+					ev.st.SetVar(ast.left[i].name, right[0])
+				} else {
+					s := ev.st.Get(ast.left[i].name)
+					switch ast.op {
+					case "+=":
+						s.varValue += right[0]
+					case "-=":
+						s.varValue -= right[0]
+					case "*=":
+						s.varValue *= right[0]
+					case "/=":
+						s.varValue /= right[0]
+					default:
+						panic(ast.op)
+					}
+				}
+			}
+			return right
+		}
+		if len(ast.left) != len(right) {
+			panic(len(ast.left) - len(right))
+		}
+		for i := range ast.left {
+			if ast.isDefined {
+				ev.st.DefinedVar(ast.left[i].name, right[i])
+			} else if ast.op == "=" {
+				ev.st.SetVar(ast.left[i].name, right[i])
+			} else {
+				s := ev.st.Get(ast.left[i].name)
+				switch ast.op {
+				case "+=":
+					s.varValue += right[i]
+				case "-=":
+					s.varValue -= right[i]
+				case "*=":
+					s.varValue *= right[i]
+				case "/=":
+					s.varValue /= right[i]
+				default:
+					panic(ast.op)
+				}
+			}
+		}
+		return right
 	}
 	panic(ast)
 }

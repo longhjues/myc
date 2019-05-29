@@ -19,5 +19,7 @@ func main() {
 	// }
 	// return
 	p := NewParse(l)
-	fmt.Printf("%#v", p.parse())
+	ev := NewExecVisitor(p.parse())
+	ev.Exec()
+	fmt.Printf("%v", ev.st)
 }
