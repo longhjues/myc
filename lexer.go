@@ -24,7 +24,26 @@ const (
 	TokenComma
 	TokenColon
 	TokenVar
+	TokenElse
+	TokenThen
+	TokenAnd
+	TokenOr
+	TokenNot
+	TokenAndSlower
+	TokenOrSlower
+	TokenNotSlower
+	TokenCompare
 )
+
+var KeyWords = map[string]*Token{
+	"var":  {Type: TokenVar},
+	"if":   {Type: TokenIf},
+	"then": {Type: TokenThen},
+	"else": {Type: TokenElse},
+	"and":  {Type: TokenAndSlower},
+	"or":   {Type: TokenOrSlower},
+	"not":  {Type: TokenNotSlower},
+}
 
 type Token struct {
 	Type  TokenType
@@ -102,6 +121,10 @@ func (l *Lexer) GetNextToken() *Token {
 		}
 		return &Token{Type: TokenMul, Value: "*"}
 	case '/':
+		if l.Peek() == '/' {
+			l.AdvanceUntil('\n')
+			return l.GetNextToken()
+		}
 		if l.Peek() == '=' {
 			return &Token{Type: TokenAssign, Value: string([]byte{c, l.Advance()})}
 		}
@@ -124,11 +147,43 @@ func (l *Lexer) GetNextToken() *Token {
 	case '}':
 		return &Token{Type: TokenRBrace}
 	case '=':
+		if l.Peek() == '=' {
+			l.Advance()
+			return &Token{Type: TokenCompare, Value: "=="}
+		}
 		return &Token{Type: TokenAssign, Value: "="}
 	case ',':
 		return &Token{Type: TokenComma}
 	case ':':
 		return &Token{Type: TokenColon}
+	case '<':
+		if l.Peek() == '=' {
+			l.Advance()
+			return &Token{Type: TokenCompare, Value: "<="}
+		}
+		return &Token{Type: TokenCompare, Value: "<"}
+	case '>':
+		if l.Peek() == '=' {
+			l.Advance()
+			return &Token{Type: TokenCompare, Value: ">="}
+		}
+		return &Token{Type: TokenCompare, Value: ">"}
+	case '&':
+		if l.Peek() == '&' {
+			l.Advance()
+			return &Token{Type: TokenAnd}
+		}
+	case '|':
+		if l.Peek() == '|' {
+			l.Advance()
+			return &Token{Type: TokenOr}
+		}
+	case '!':
+		if l.Peek() == '=' {
+			l.Advance()
+			return &Token{Type: TokenCompare, Value: "!="}
+		}
+		return &Token{Type: TokenNot}
 	}
 
 	// ID
@@ -143,9 +198,4 @@ func (l *Lexer) GetNextToken() *Token {
 		}
 		id = append(id, l.Advance())
 	}
-}
-
-var KeyWords = map[string]*Token{
-	"if":  {Type: TokenIf},
-	"var": {Type: TokenVar},
 }

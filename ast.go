@@ -38,6 +38,20 @@ type ASTAssign struct {
 	isDefined bool
 }
 
+type ASTBranch struct {
+	logic AST
+	true  AST
+	false AST
+}
+
+type ASTLogic struct {
+	op    string
+	left  AST
+	right AST
+}
+
+type ASTEmpty struct{}
+
 type Symbol struct {
 	name     string
 	value    string
@@ -237,6 +251,65 @@ func (ev *ExecVisitor) exec(ast AST) interface{} {
 			}
 		}
 		return right
+	case ASTLogic:
+		switch ast.op {
+		case "and":
+			left := ev.exec(ast.left).(int)
+			if left == 0 {
+				return 0
+			}
+			return ev.exec(ast.right)
+		case "or":
+			left := ev.exec(ast.left).(int)
+			if left != 0 {
+				return left
+			}
+			return ev.exec(ast.right)
+		case "not":
+			right := ev.exec(ast.right).(int)
+			if right == 0 {
+				return 1
+			}
+			return 0
+		case "<":
+			if ev.exec(ast.left).(int) < ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		case "<=":
+			if ev.exec(ast.left).(int) <= ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		case "==":
+			if ev.exec(ast.left).(int) == ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		case "!=":
+			if ev.exec(ast.left).(int) != ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		case ">":
+			if ev.exec(ast.left).(int) > ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		case ">=":
+			if ev.exec(ast.left).(int) >= ev.exec(ast.right).(int) {
+				return 1
+			}
+			return 0
+		}
+	case ASTEmpty:
+		return nil
+	case ASTBranch:
+		if ev.exec(ast.logic).(int) == 0 {
+			return ev.exec(ast.false)
+		} else {
+			return ev.exec(ast.true)
+		}
 	}
 	panic(ast)
 }

@@ -1,4 +1,12 @@
-var i,c=1
-var a=2+1-5*    5
+var i,c=1-1+2
+var a=2+1-1-5*    5
 var b  =-a
      b-= c++1--2
+if not b then var d=1 else var d=2
+
+// var e,f,g  = 200,100,0
+// if e>f {
+// g=1
+// }# else{
+// g=0
+// }
