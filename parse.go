@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"log"
+)
 
 func NewParse(l *Lexer) *Parse {
 	return &Parse{l: l, t: l.GetNextToken()}
@@ -20,6 +22,7 @@ func (p *Parse) peek() TokenType {
 }
 
 func (p *Parse) mustEat(t TokenType) string {
+	log.Println(t, p.t)
 	if p.t.Type == t {
 		t := p.t
 		if p.peekToken != nil {
@@ -29,22 +32,21 @@ func (p *Parse) mustEat(t TokenType) string {
 		}
 		return t.Value
 	}
-	fmt.Println(t, p.t)
 	panic(p.t.Type)
 }
 
-func (p *Parse) eat(t TokenType) (bool, string) {
-	if p.t.Type == t {
-		t := p.t
-		if p.peekToken != nil {
-			p.t, p.peekToken = p.peekToken, nil
-		} else {
-			p.t = p.l.GetNextToken()
-		}
-		return true, t.Value
-	}
-	return false, ""
-}
+// func (p *Parse) eat(t TokenType) (bool, string) {
+// 	if p.t.Type == t {
+// 		t := p.t
+// 		if p.peekToken != nil {
+// 			p.t, p.peekToken = p.peekToken, nil
+// 		} else {
+// 			p.t = p.l.GetNextToken()
+// 		}
+// 		return true, t.Value
+// 	}
+// 	return false, ""
+// }
 
 func (p *Parse) parse() AST {
 	return p.program()
@@ -52,14 +54,12 @@ func (p *Parse) parse() AST {
 
 // program : stmt_list EOF
 func (p *Parse) program() AST {
-	fmt.Println("program", p.t)
 	defer p.mustEat(TokenEOF)
 	return p.stmtList()
 }
 
 // stmt_list : stmt | stmt Return stmt_list
 func (p *Parse) stmtList() AST {
-	fmt.Println("stmtList", p.t)
 	var list []AST
 	var ast = p.stmt()
 	if ast != nil {
@@ -81,8 +81,6 @@ func (p *Parse) stmtList() AST {
 //      | (Var)? variable (Comma variable)* ASSIGN expr (Comma expr)*
 //      | empty
 func (p *Parse) stmt() AST {
-	fmt.Println("stmt", p.t)
-
 	if p.t.Type == TokenLBrace {
 		p.mustEat(TokenLBrace)
 		defer p.mustEat(TokenRBrace)
@@ -94,10 +92,11 @@ func (p *Parse) stmt() AST {
 		logic := p.logic()
 		if p.t.Type == TokenLBrace {
 			p.mustEat(TokenLBrace)
-			defer p.mustEat(TokenRBrace)
+			stmtList := p.stmtList()
+			p.mustEat(TokenRBrace)
 			return ASTBranch{
 				logic: logic,
-				true:  p.stmtList(),
+				true:  stmtList,
 				false: p._else(),
 			}
 		}
@@ -140,26 +139,23 @@ func (p *Parse) stmt() AST {
 	return nil // ASTEmpty{}
 }
 
-// _else : ELSE stmt RETURN
+// _else : ELSE stmt
 //       | empty
 func (p *Parse) _else() AST {
 	if p.t.Type != TokenElse {
 		return nil
 	}
 	p.mustEat(TokenElse)
-	defer p.mustEat(TokenReturn)
 	return p.stmt()
 }
 
 // variable : ID
 func (p *Parse) variable() AST {
-	fmt.Println("variable", p.t)
 	return ASTVariable{name: p.mustEat(TokenID)}
 }
 
 // expr : term ((Plus | Minus) term)*
 func (p *Parse) expr() AST {
-	fmt.Println("expr", p.t)
 	left := p.term()
 	for p.t.Type == TokenPlus || p.t.Type == TokenMinus {
 		left = ASTBinaryOp{
@@ -173,7 +169,6 @@ func (p *Parse) expr() AST {
 
 // term : factor ((Mul | Div) factor)*
 func (p *Parse) term() AST {
-	fmt.Println("term", p.t)
 	left := p.factor()
 	for p.t.Type == TokenMul || p.t.Type == TokenDiv {
 		left = ASTBinaryOp{
@@ -187,7 +182,6 @@ func (p *Parse) term() AST {
 
 // factor : Plus factor | Minus factor | Number | LParen expr RParen | variable
 func (p *Parse) factor() AST {
-	fmt.Println("factor", p.t)
 	switch p.t.Type {
 	case TokenPlus:
 		return ASTUnaryOp{op: p.mustEat(TokenPlus), AST: p.factor()}

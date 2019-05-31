@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 )
 
@@ -155,7 +156,7 @@ func (ev *ExecVisitor) Exec() {
 }
 
 func (ev *ExecVisitor) exec(ast AST) interface{} {
-	fmt.Println("exec:", ast)
+	log.Println("exec:", ast)
 	switch ast := ast.(type) {
 	case ASTNumber:
 		tmp, err := strconv.Atoi(ast.num)

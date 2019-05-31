@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
+	"log"
 )
 
 func main() {
@@ -21,5 +21,5 @@ func main() {
 	p := NewParse(l)
 	ev := NewExecVisitor(p.parse())
 	ev.Exec()
-	fmt.Printf("%v", ev.st)
+	log.Printf("%v", ev.st)
 }
