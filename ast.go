@@ -24,8 +24,13 @@ type ASTBinaryOp struct {
 	right AST
 }
 
+type ASTExpr struct {
+	list []AST
+}
+
 type ASTVariable struct {
 	name string
+	ty   string // type
 }
 
 type ASTStmt struct {
@@ -49,6 +54,17 @@ type ASTLogic struct {
 	op    string
 	left  AST
 	right AST
+}
+
+type ASTFunction struct {
+	name   ASTVariable
+	params []ASTVariable
+	stmt   AST
+}
+
+type ASTReturn struct {
+	expr  AST
+	error string
 }
 
 type ASTEmpty struct{}
@@ -311,6 +327,8 @@ func (ev *ExecVisitor) exec(ast AST) interface{} {
 		} else {
 			return ev.exec(ast.true)
 		}
+	case ASTFunction: // skip
+		return nil
 	}
 	panic(ast)
 }

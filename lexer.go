@@ -8,7 +8,7 @@ type TokenType int
 
 const (
 	TokenEOF TokenType = iota
-	TokenReturn
+	TokenEnter
 	TokenPlus
 	TokenMinus
 	TokenMul
@@ -33,16 +33,20 @@ const (
 	TokenOrSlower
 	TokenNotSlower
 	TokenCompare
+	TokenFunction
+	TokenReturn
 )
 
 var KeyWords = map[string]*Token{
-	"var":  {Type: TokenVar},
-	"if":   {Type: TokenIf},
-	"then": {Type: TokenThen},
-	"else": {Type: TokenElse},
-	"and":  {Type: TokenAndSlower},
-	"or":   {Type: TokenOrSlower},
-	"not":  {Type: TokenNotSlower},
+	"var":    {Type: TokenVar},
+	"if":     {Type: TokenIf},
+	"then":   {Type: TokenThen},
+	"else":   {Type: TokenElse},
+	"and":    {Type: TokenAndSlower},
+	"or":     {Type: TokenOrSlower},
+	"not":    {Type: TokenNotSlower},
+	"func":   {Type: TokenFunction},
+	"return": {Type: TokenReturn},
 }
 
 type Token struct {
@@ -100,7 +104,7 @@ func (l *Lexer) GetNextToken() *Token {
 			l.Advance()
 			c = l.Peek()
 		}
-		return &Token{Type: TokenReturn}
+		return &Token{Type: TokenEnter}
 	case '+':
 		if l.Peek() == '=' {
 			return &Token{Type: TokenAssign, Value: string([]byte{c, l.Advance()})}

@@ -58,15 +58,15 @@ func (p *Parse) program() AST {
 	return p.stmtList()
 }
 
-// stmt_list : stmt | stmt Return stmt_list
+// stmt_list : stmt | stmt Enter stmt_list
 func (p *Parse) stmtList() AST {
 	var list []AST
 	var ast = p.stmt()
 	if ast != nil {
 		list = append(list, ast)
 	}
-	for p.t.Type == TokenReturn {
-		p.mustEat(TokenReturn)
+	for p.t.Type == TokenEnter {
+		p.mustEat(TokenEnter)
 		ast = p.stmt()
 		if ast != nil {
 			list = append(list, ast)
@@ -78,7 +78,10 @@ func (p *Parse) stmtList() AST {
 // stmt : LBrace stmt_list RBrace
 //      | IF logic LBrace stmt_list RBrace _else
 //      | IF logic THEN stmt _else
-//      | (Var)? variable (Comma variable)* ASSIGN expr (Comma expr)*
+//      | Function variable LParen params RParen stmt
+//      | Return expr (Colon Number)?
+//      | (Var)? (variable (Comma variable)* ASSIGN)+ expr (Comma expr)*
+//      | expr
 //      | empty
 func (p *Parse) stmt() AST {
 	if p.t.Type == TokenLBrace {
@@ -108,6 +111,29 @@ func (p *Parse) stmt() AST {
 		}
 	}
 
+	if p.t.Type == TokenFunction {
+		p.mustEat(TokenFunction)
+		name := p.variable()
+		p.mustEat(TokenLParen)
+		params := p.params()
+		p.mustEat(TokenRParen)
+		return ASTFunction{
+			name:   name,
+			params: params,
+			stmt:   p.stmt(),
+		}
+	}
+
+	if p.t.Type == TokenReturn {
+		p.mustEat(TokenReturn)
+		expr := p.expr()
+		if p.t.Type != TokenColon {
+			return ASTReturn{expr: expr}
+		}
+		p.mustEat(TokenColon)
+		return ASTReturn{expr: expr, error: p.mustEat(TokenNumber)}
+	}
+
 	// if p.t.Type == TokenVar || p.peek() == TokenComma || p.peek() == TokenAssign {
 	if p.t.Type == TokenVar || p.t.Type == TokenID {
 		var isDefined bool
@@ -116,10 +142,10 @@ func (p *Parse) stmt() AST {
 			isDefined = true
 		}
 		var left []ASTVariable
-		left = append(left, p.variable().(ASTVariable))
+		left = append(left, p.variable())
 		for p.t.Type == TokenComma {
 			p.mustEat(TokenComma)
-			left = append(left, p.variable().(ASTVariable))
+			left = append(left, p.variable())
 		}
 		var op = p.mustEat(TokenAssign)
 		var right []AST
@@ -139,6 +165,21 @@ func (p *Parse) stmt() AST {
 	return nil // ASTEmpty{}
 }
 
+// params : (ID (Comma Enter*)?)*
+func (p *Parse) params() []ASTVariable {
+	var list []ASTVariable
+	for p.t.Type == TokenID {
+		list = append(list, p.variable())
+		if p.t.Type == TokenComma {
+			p.mustEat(TokenComma)
+			for p.t.Type == TokenEnter {
+				p.mustEat(TokenEnter)
+			}
+		}
+	}
+	return list
+}
+
 // _else : ELSE stmt
 //       | empty
 func (p *Parse) _else() AST {
@@ -150,12 +191,35 @@ func (p *Parse) _else() AST {
 }
 
 // variable : ID
-func (p *Parse) variable() AST {
+func (p *Parse) variable() ASTVariable {
 	return ASTVariable{name: p.mustEat(TokenID)}
 }
 
-// expr : term ((Plus | Minus) term)*
-func (p *Parse) expr() AST {
+// op_1 : [] () . ->
+// op_2 : - * & ! ~ sizeof
+// op_3 : as
+// op_4 : / * %
+// op_5 : + -
+// op_6 : << >>
+// op_7 : & ^ |
+// op_8 : > >= < <= == !=
+// op_9 : &&
+// op_10 : ||
+// op_11 : = /= *= %= += -= <<= >>= &= ^= |=
+// op_12 : ,
+
+// expr : term_plus_minus | term_plus_minus Comma expr
+func (p *Parse) expr() ASTExpr {
+	var list ASTExpr
+	list.list = []AST{p.termPlusMinus()}
+	for p.t.Type == TokenComma {
+		list.list = append(list.list, p.termPlusMinus())
+	}
+	return list
+}
+
+// term_2 : term ((Plus | Minus) term)*
+func (p *Parse) termPlusMinus() AST {
 	left := p.term()
 	for p.t.Type == TokenPlus || p.t.Type == TokenMinus {
 		left = ASTBinaryOp{
@@ -180,7 +244,7 @@ func (p *Parse) term() AST {
 	return left
 }
 
-// factor : Plus factor | Minus factor | Number | LParen expr RParen | variable
+// factor : Plus factor | Minus factor | Number | LParen term_plus_minus RParen | variable
 func (p *Parse) factor() AST {
 	switch p.t.Type {
 	case TokenPlus:
@@ -192,7 +256,7 @@ func (p *Parse) factor() AST {
 	case TokenLParen:
 		p.mustEat(TokenLParen)
 		defer p.mustEat(TokenRParen)
-		return p.expr()
+		return p.termPlusMinus()
 	default:
 		return p.variable()
 	}
