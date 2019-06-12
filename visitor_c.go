@@ -1,189 +1,40 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 )
 
-type AST interface{}
-
-type ASTProject struct {
-	_import  []ASTImport
-	stmtList AST
-}
-
-type ASTImport struct {
-	path string
-}
-
-type ASTNumber struct {
-	num string
-}
-
-type ASTUnaryOp struct {
-	op string
-	AST
-}
-
-type ASTBinaryOp struct {
-	left  AST
-	op    string
-	right AST
-}
-
-type ASTExpr struct {
-	list []AST
-}
-
-type ASTVariable struct {
-	name string
-	ty   string // type
-}
-
-type ASTStmt struct {
-	list []AST
-}
-
-type ASTAssign struct {
-	left      []ASTVariable
-	op        string
-	right     []AST
-	isDefined bool
-}
-
-type ASTBranch struct {
-	logic AST
-	true  AST
-	false AST
-}
-
-type ASTLogic struct {
-	op    string
-	left  AST
-	right AST
-}
-
-type ASTFunction struct {
-	name    ASTVariable
-	params  []ASTVariable
-	_return []ASTVariable
-	stmt    AST
-}
-
-type ASTReturn struct {
-	expr  AST
-	error string
-}
-
-type ASTEmpty struct{}
-
-type Symbol struct {
-	name     string
-	value    string
-	varValue int
-	t        string // type
-}
-
-func (s *Symbol) String() string {
-	return fmt.Sprintf("(%s:%v:%v)", s.name, s.value, s.varValue)
-}
-
-func NewSymbolTable(prev *SymbolTable) *SymbolTable {
-	return &SymbolTable{
-		prev: prev,
-		t:    make(map[string]*Symbol),
+func NewExportCVisitor(ast AST, w io.Writer) *ExportCVisitor {
+	return &ExportCVisitor{
+		ast:    ast,
+		Writer: w,
 	}
 }
 
-type SymbolTable struct {
-	prev *SymbolTable
-	t    map[string]*Symbol
-}
-
-func (st *SymbolTable) String() string {
-	return fmt.Sprintf("{%v\n%v}", st.t, st.prev)
-}
-
-func (st *SymbolTable) Get(name string) *Symbol {
-	if s, ok := st.t[name]; ok {
-		return s
-	}
-	if st.prev == nil {
-		return nil
-	}
-	return st.prev.Get(name)
-}
-
-func (st *SymbolTable) SetVar(name string, value int) {
-	if _, ok := st.t[name]; ok {
-		if err := st.set(name, "var", value); err != nil {
-			panic(err)
-		}
-		return
-	}
-	if st.prev == nil {
-		panic(name)
-	}
-	st.prev.SetVar(name, value)
-}
-
-func (st *SymbolTable) DefinedVar(name string, value int) {
-	if s, ok := st.t[name]; ok {
-		panic(s)
-	}
-	st.set(name, "var", value)
-}
-
-func (st *SymbolTable) set(name, t string, value int) error {
-	if s, ok := st.t[name]; ok {
-		if s.t != t {
-			return errors.New("type is not much")
-		}
-		s.t = t
-		return nil
-	}
-	st.t[name] = &Symbol{
-		name:     name,
-		t:        t,
-		varValue: value,
-	}
-	return nil
-}
-
-func (st *SymbolTable) DefinedOrSetVar(name string, value int) {
-	s := st.Get(name)
-	if s == nil {
-		st.set(name, "var", value)
-		return
-	}
-	if s.t != "var" {
-		panic(s.t)
-	}
-	s.varValue = value
-}
-
-func NewExecVisitor(ast AST) *ExecVisitor {
-	return &ExecVisitor{
-		ast: ast,
-	}
-}
-
-type ExecVisitor struct {
+type ExportCVisitor struct {
 	ast AST
 	st  *SymbolTable
+
+	io.Writer
 }
 
-func (ev *ExecVisitor) Exec() {
+func (ev *ExportCVisitor) Exec() {
 	ev.st = NewSymbolTable(nil)
 	ev.exec(ev.ast)
 	// ev.st.
 }
 
-func (ev *ExecVisitor) exec(ast AST) interface{} {
+func (ev *ExportCVisitor) exec(ast AST) interface{} {
 	log.Println("exec:", ast)
 	switch ast := ast.(type) {
+	case ASTProject: // TODO: only one
+		for i := range ast._import {
+			fmt.Fprintf(ev, "#include\"%s\";\n", ast._import[i].path)
+		}
+		return ev.exec(ast.stmtList)
 	case ASTNumber:
 		tmp, err := strconv.Atoi(ast.num)
 		if err != nil {

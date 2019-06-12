@@ -18,7 +18,6 @@ const (
 	TokenNumber
 	TokenString
 
-	TokenIf
 	TokenLParen
 	TokenRParen
 	TokenLBrace
@@ -26,25 +25,28 @@ const (
 	TokenAssign
 	TokenComma
 	TokenColon
+	TokenDot
+
+	TokenIf
 	TokenVar
 	TokenElse
 	TokenThen
-	TokenAnd
-	TokenOr
-	TokenNot
+	TokenAs
+	TokenImport
 	TokenAndSlower
 	TokenOrSlower
 	TokenNotSlower
-	TokenCompare
 	TokenFunction
 	TokenReturn
+
+	TokenAnd
+	TokenOr
+	TokenNot
+	TokenCompare
 
 	TokenOpBit
 	TokenOpAnd
 	TokenUnaryOp
-
-	TokenAs
-	TokenImport
 )
 
 var KeyWords = map[string]*Token{
@@ -155,12 +157,14 @@ func (l *Lexer) GetNextToken() *Token {
 			num = append(num, l.Advance())
 		}
 	case '"': // String
+		l.Advance()
 		var s []byte
 		for {
 			c = l.Peek()
 			if c == '\\' { // TODO: 处理转移字符
 				l.Advance()
 			} else if c == '"' {
+				l.Advance()
 				return &Token{Type: TokenString, Value: string(s)}
 			}
 			s = append(s, l.Advance())
@@ -180,9 +184,11 @@ func (l *Lexer) GetNextToken() *Token {
 		}
 		return &Token{Type: TokenAssign, Value: "="}
 	case ',':
-		return &Token{Type: TokenComma}
+		return &Token{Type: TokenComma, Value: ","}
+	case '.':
+		return &Token{Type: TokenDot, Value: "."}
 	case ':':
-		return &Token{Type: TokenColon}
+		return &Token{Type: TokenColon, Value: ":"}
 	case '<':
 		if l.Peek() == '=' {
 			l.Advance()

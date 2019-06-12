@@ -3,10 +3,11 @@ package main
 import (
 	"io/ioutil"
 	"log"
+	"os"
 )
 
 func main() {
-	b, err := ioutil.ReadFile("myc/test.myc")
+	b, err := ioutil.ReadFile("myc/test01.myc")
 	if err != nil {
 		panic(err)
 	}
@@ -19,7 +20,15 @@ func main() {
 	// }
 	// return
 	p := NewParse(l)
-	ev := NewExecVisitor(p.parse())
+	f, err := os.Create("myc/test01.c")
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer f.Close()
+
+	ev := NewExportCVisitor(p.parse(), f)
+	// ev := NewExecVisitor(p.parse())
 	ev.Exec()
 	log.Printf("%v", ev.st)
 }

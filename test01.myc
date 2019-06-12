@@ -1,0 +1,7 @@
+
+import "stdio.h"
+
+func main()(int){
+	stdio.printf("hello world!")
+	return 0
+}
