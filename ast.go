@@ -9,6 +9,15 @@ import (
 
 type AST interface{}
 
+type ASTProject struct {
+	_import  []ASTImport
+	stmtList AST
+}
+
+type ASTImport struct {
+	path string
+}
+
 type ASTNumber struct {
 	num string
 }

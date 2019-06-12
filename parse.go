@@ -52,10 +52,23 @@ func (p *Parse) parse() AST {
 	return p.program()
 }
 
-// program : stmt_list EOF
+// program : import stmt_list EOF
 func (p *Parse) program() AST {
 	defer p.mustEat(TokenEOF)
-	return p.stmtList()
+	return ASTProject{p._import(), p.stmtList()}
+}
+
+// import : (Import String Enter)*
+func (p *Parse) _import() []ASTImport {
+	var list []ASTImport
+	for p.t.Type == TokenImport {
+		p.mustEat(TokenImport)
+		list = append(list, ASTImport{p.mustEat(TokenString)})
+		for p.t.Type == TokenEnter {
+			p.mustEat(TokenEnter)
+		}
+	}
+	return list
 }
 
 // stmt_list : stmt | stmt Enter stmt_list
@@ -195,162 +208,186 @@ func (p *Parse) variable() ASTVariable {
 	return ASTVariable{name: p.mustEat(TokenID)}
 }
 
-// op_1 : [] () . ->
-// op_2 : - * & ! ~ sizeof
-// op_3 : as
-// op_4 : / * %
-// op_5 : + -
-// op_6 : << >>
-// op_7 : & ^ |
-// op_8 : > >= < <= == !=
-// op_9 : &&
-// op_10 : ||
-// op_11 : = /= *= %= += -= <<= >>= &= ^= |=
-// op_12 : ,
+// op_0 : [] () . ->
+// op_1 : - * & ! ~ sizeof
+// op_2 : as
+// op_3 : / * %
+// op_4 : + -
+// op_5 : << >> & ^ |
+// op_6 : > >= < <= == !=
+// op_7 : &&
+// op_8 : ||
+// op_9 : = /= *= %= += -= <<= >>= &= ^= |=
 
-// expr : term_plus_minus | term_plus_minus Comma expr
+// expr : op_8 (Comma op_8)*
 func (p *Parse) expr() ASTExpr {
 	var list ASTExpr
-	list.list = []AST{p.termPlusMinus()}
+	list.list = []AST{p.op8()}
 	for p.t.Type == TokenComma {
-		list.list = append(list.list, p.termPlusMinus())
+		list.list = append(list.list, p.op8())
 	}
 	return list
 }
 
-// term_2 : term ((Plus | Minus) term)*
-func (p *Parse) termPlusMinus() AST {
-	left := p.term()
+// op_8 : op_7 (Or op_7)*
+func (p *Parse) op8() AST {
+	var left = p.op7()
+	for p.t.Type == TokenOr {
+		left = ASTBinaryOp{
+			left:  left,
+			op:    p.mustEat(TokenOr),
+			right: p.op7(),
+		}
+	}
+	return left
+}
+
+// op_7 : op_6 (And op_6)*
+func (p *Parse) op7() AST {
+	var left = p.op6()
+	for p.t.Type == TokenAnd {
+		left = ASTBinaryOp{
+			left:  left,
+			op:    p.mustEat(TokenAnd),
+			right: p.op6(),
+		}
+	}
+	return left
+}
+
+// op_6 : op_5 (Compare op_5)*
+func (p *Parse) op6() AST {
+	var left = p.op5()
+	for p.t.Type == TokenCompare {
+		left = ASTBinaryOp{
+			left:  left,
+			op:    p.mustEat(TokenCompare),
+			right: p.op5(),
+		}
+	}
+	return left
+}
+
+// op_5 : op_4 ((BitOp | OpAnd) op_4)*
+func (p *Parse) op5() AST {
+	var left = p.op4()
+	for p.t.Type == TokenOpBit || p.t.Type == TokenOpAnd {
+		left = ASTBinaryOp{
+			left:  left,
+			op:    p.mustEat(p.t.Type),
+			right: p.op4(),
+		}
+	}
+	return left
+}
+
+// op_4 : op_3 ((Plus | Minus) op_3)*
+func (p *Parse) op4() AST {
+	var left = p.op3()
 	for p.t.Type == TokenPlus || p.t.Type == TokenMinus {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(p.t.Type),
-			right: p.term(),
+			right: p.op3(),
 		}
 	}
 	return left
 }
 
-// term : factor ((Mul | Div) factor)*
-func (p *Parse) term() AST {
-	left := p.factor()
+// op_3 : op_2 ((Mul | Div) op_2)*
+func (p *Parse) op3() AST {
+	var left = p.op2()
 	for p.t.Type == TokenMul || p.t.Type == TokenDiv {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(p.t.Type),
-			right: p.factor(),
+			right: p.op2(),
 		}
 	}
 	return left
 }
 
-// factor : Plus factor | Minus factor | Number | LParen term_plus_minus RParen | variable
+// op_2 : op_1 (As op_1)*
+func (p *Parse) op2() AST {
+	var left = p.op1()
+	for p.t.Type == TokenAs {
+		left = ASTBinaryOp{
+			left:  left,
+			op:    p.mustEat(TokenAs),
+			right: p.op1(),
+		}
+	}
+	return left
+}
+
+// op_1 : (Mul | Minus | OpAnd | UnaryOp)* factor
+func (p *Parse) op1() AST {
+	var ast AST
+	var tmp = ast
+	ast = tmp
+	for p.t.Type == TokenMul || p.t.Type == TokenMinus || p.t.Type == TokenOpAnd || p.t.Type == TokenUnaryOp {
+		ast = ASTUnaryOp{
+			op:  p.mustEat(p.t.Type),
+			AST: ast,
+		}
+	}
+	tmp = p.factor()
+	return ast
+}
+
+// factor : Number | LParen op_8 RParen | variable
 func (p *Parse) factor() AST {
 	switch p.t.Type {
-	case TokenPlus:
-		return ASTUnaryOp{op: p.mustEat(TokenPlus), AST: p.factor()}
-	case TokenMinus:
-		return ASTUnaryOp{op: p.mustEat(TokenMinus), AST: p.factor()}
 	case TokenNumber:
 		return ASTNumber{num: p.mustEat(TokenNumber)}
 	case TokenLParen:
 		p.mustEat(TokenLParen)
 		defer p.mustEat(TokenRParen)
-		return p.termPlusMinus()
+		return p.op8()
 	default:
 		return p.variable()
 	}
 }
 
-// logic(logic_or_slower) : logic_and_slower | logic_and_slower Or logic
+// logic(logic_or_slower) : logic_and_slower (OrSlower logic_and_slower)*
 func (p *Parse) logic() AST {
-	logic := p.logicAndSlower()
-	if p.t.Type == TokenOrSlower {
-		p.mustEat(TokenOrSlower)
-		return ASTLogic{
-			op:    "or",
-			left:  logic,
-			right: p.logic(),
-		}
-	}
-	return logic
-}
-
-// logic_and_slower : logic_not_slower | logic_not_slower And logic_and_slower
-func (p *Parse) logicAndSlower() AST {
-	logic := p.logicNotSlower()
-	if p.t.Type == TokenAndSlower {
-		p.mustEat(TokenAndSlower)
-		return ASTLogic{
-			op:    "or",
-			left:  logic,
+	var left = p.logicAndSlower()
+	for p.t.Type == TokenOrSlower {
+		left = ASTLogic{
+			left:  left,
+			op:    p.mustEat(TokenOrSlower),
 			right: p.logicAndSlower(),
 		}
 	}
-	return logic
+	return left
 }
 
-// logic_not_slower : logic_or | Not logic_not_slower
-func (p *Parse) logicNotSlower() AST {
-	if p.t.Type == TokenNotSlower {
-		p.mustEat(TokenNotSlower)
-		return ASTLogic{
-			op:    "not",
+// logic_and_slower : logic_not_slower (AndSlower logic_not_slower)*
+func (p *Parse) logicAndSlower() AST {
+	var left = p.logicNotSlower()
+	for p.t.Type == TokenAndSlower {
+		left = ASTLogic{
+			left:  left,
+			op:    p.mustEat(TokenAndSlower),
 			right: p.logicNotSlower(),
 		}
 	}
-	return p.logicOr()
+	return left
 }
 
-// logic_or : logic_and | logic_and Or logic_or
-func (p *Parse) logicOr() AST {
-	logic := p.logicAnd()
-	if p.t.Type == TokenOr {
-		p.mustEat(TokenOr)
+// logic_not_slower : LParen logic RParen | NotSlower expr | expr
+func (p *Parse) logicNotSlower() AST {
+	switch p.t.Type {
+	case TokenLParen:
+		p.mustEat(TokenLParen)
+		defer p.mustEat(TokenRParen)
+		return p.logic()
+	case TokenNotSlower:
 		return ASTLogic{
-			op:    "or",
-			left:  logic,
-			right: p.logicOr(),
-		}
-	}
-	return logic
-}
-
-// logic_and : logic_not | logic_not And logic_and
-func (p *Parse) logicAnd() AST {
-	logic := p.logicNot()
-	if p.t.Type == TokenAnd {
-		p.mustEat(TokenAnd)
-		return ASTLogic{
-			op:    "and",
-			left:  logic,
-			right: p.logicAnd(),
-		}
-	}
-	return logic
-}
-
-// logic_not : compare | Not logic_not
-func (p *Parse) logicNot() AST {
-	if p.t.Type == TokenNot {
-		p.mustEat(TokenNot)
-		return ASTLogic{
-			op:    "not",
-			right: p.logicNot(),
-		}
-	}
-	return p.compare()
-}
-
-// compare : expr | expr Compare expr
-func (p *Parse) compare() AST {
-	logic := p.expr()
-	if p.t.Type == TokenCompare {
-		return ASTLogic{
-			op:    p.mustEat(TokenCompare),
-			left:  logic,
+			op:    p.mustEat(TokenNotSlower),
 			right: p.expr(),
 		}
+	default:
+		return p.expr()
 	}
-	return logic
 }

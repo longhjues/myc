@@ -14,7 +14,10 @@ const (
 	TokenMul
 	TokenDiv
 	TokenID
+
 	TokenNumber
+	TokenString
+
 	TokenIf
 	TokenLParen
 	TokenRParen
@@ -35,6 +38,13 @@ const (
 	TokenCompare
 	TokenFunction
 	TokenReturn
+
+	TokenOpBit
+	TokenOpAnd
+	TokenUnaryOp
+
+	TokenAs
+	TokenImport
 )
 
 var KeyWords = map[string]*Token{
@@ -47,6 +57,8 @@ var KeyWords = map[string]*Token{
 	"not":    {Type: TokenNotSlower},
 	"func":   {Type: TokenFunction},
 	"return": {Type: TokenReturn},
+	"as":     {Type: TokenAs},
+	"import": {Type: TokenImport},
 }
 
 type Token struct {
@@ -141,6 +153,17 @@ func (l *Lexer) GetNextToken() *Token {
 				return &Token{Type: TokenNumber, Value: string(num)}
 			}
 			num = append(num, l.Advance())
+		}
+	case '"': // String
+		var s []byte
+		for {
+			c = l.Peek()
+			if c == '\\' { // TODO: 处理转移字符
+				l.Advance()
+			} else if c == '"' {
+				return &Token{Type: TokenString, Value: string(s)}
+			}
+			s = append(s, l.Advance())
 		}
 	case '(':
 		return &Token{Type: TokenLParen}
