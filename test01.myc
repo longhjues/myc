@@ -1,7 +1,24 @@
-
 import "stdio.h"
+     b-= c+1--2
+func add(a,b){ return a+b}
+
+a=1+3+4
+
 
 func main()(int){
 	stdio.printf("hello world!")
 	return 0
 }
+
+
+var i,c=1-1+2
+var a=2+1-1-5*    5
+var b  =-a
+if not b then var d=1 else var d=2
+
+var e,f,g  = 200,100,0
+ if e>f {
+            g=1
+ } else{
+ g=0
+ }

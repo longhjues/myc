@@ -14,17 +14,41 @@ type ASTProject struct {
 	stmtList AST
 }
 
+func (ast ASTProject) String() string {
+	return fmt.Sprintf("(imports %v,program %v)", ast._import, ast.stmtList)
+}
+
 type ASTImport struct {
 	path string
+}
+
+func (ast ASTImport) String() string {
+	return fmt.Sprintf("(import %v)", ast.path)
 }
 
 type ASTNumber struct {
 	num string
 }
 
+func (ast ASTNumber) String() string {
+	return fmt.Sprintf("[N:%v]", ast.num)
+}
+
+type ASTString struct {
+	s string
+}
+
+func (ast ASTString) String() string {
+	return fmt.Sprintf("[S:%v]", ast.s)
+}
+
 type ASTUnaryOp struct {
 	op string
 	AST
+}
+
+func (ast ASTUnaryOp) String() string {
+	return fmt.Sprintf("(op %v %v)", ast.op, ast.AST)
 }
 
 type ASTBinaryOp struct {
@@ -33,8 +57,8 @@ type ASTBinaryOp struct {
 	right AST
 }
 
-type ASTExpr struct {
-	list []AST
+func (ast ASTBinaryOp) String() string {
+	return fmt.Sprintf("(op %v %v %v)", ast.left, ast.op, ast.right)
 }
 
 type ASTVariable struct {
@@ -42,8 +66,18 @@ type ASTVariable struct {
 	ty   string // type
 }
 
+func (ast ASTVariable) String() string {
+	return fmt.Sprintf("[V:%v:%v]", ast.name, ast.ty)
+}
+
+// type ASTType struct{}
+
 type ASTStmt struct {
 	list []AST
+}
+
+func (ast ASTStmt) String() string {
+	return fmt.Sprintf("(stmt %v)", ast.list)
 }
 
 type ASTAssign struct {
@@ -53,16 +87,28 @@ type ASTAssign struct {
 	isDefined bool
 }
 
+func (ast ASTAssign) String() string {
+	return fmt.Sprintf("(assign %v %v(%v) %v)", ast.left, ast.op, ast.isDefined, ast.right)
+}
+
 type ASTBranch struct {
 	logic AST
 	true  AST
 	false AST
 }
 
+func (ast ASTBranch) String() string {
+	return fmt.Sprintf("(branch %v %v %v)", ast.logic, ast.true, ast.false)
+}
+
 type ASTLogic struct {
 	op    string
 	left  AST
 	right AST
+}
+
+func (ast ASTLogic) String() string {
+	return fmt.Sprintf("(logic %s %v %v)", ast.op, ast.left, ast.right)
 }
 
 type ASTFunction struct {
@@ -72,12 +118,33 @@ type ASTFunction struct {
 	stmt    AST
 }
 
+func (ast ASTFunction) String() string {
+	return fmt.Sprintf("(def_func %v (%v) (%v) %v)", ast.name, ast.params, ast._return, ast.stmt)
+}
+
+type ASTCallFunc struct {
+	name   ASTVariable
+	params []AST
+}
+
+func (ast ASTCallFunc) String() string {
+	return fmt.Sprintf("(call_func %v (%v))", ast.name, ast.params)
+}
+
 type ASTReturn struct {
-	expr  AST
+	expr  []AST
 	error string
 }
 
+func (ast ASTReturn) String() string {
+	return fmt.Sprintf("(return %v %s)", ast.expr, ast.error)
+}
+
 type ASTEmpty struct{}
+
+func (ast ASTEmpty) String() string {
+	return "(VOID)"
+}
 
 type Symbol struct {
 	name     string

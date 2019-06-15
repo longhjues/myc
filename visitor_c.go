@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
+	"strings"
 )
 
 func NewExportCVisitor(ast AST, w io.Writer) *ExportCVisitor {
@@ -32,164 +32,89 @@ func (ev *ExportCVisitor) exec(ast AST) interface{} {
 	switch ast := ast.(type) {
 	case ASTProject: // TODO: only one
 		for i := range ast._import {
-			fmt.Fprintf(ev, "#include\"%s\";\n", ast._import[i].path)
+			fmt.Fprintf(ev, "#include\"%s\"\n", ast._import[i].path)
+			fmt.Printf("#include\"%s\"\n", ast._import[i].path)
 		}
-		return ev.exec(ast.stmtList)
+		var tmp = ev.exec(ast.stmtList)
+		fmt.Fprintf(ev, "%v\n", tmp)
+		fmt.Printf("%v\n", tmp)
+		return nil
 	case ASTNumber:
-		tmp, err := strconv.Atoi(ast.num)
-		if err != nil {
-			panic(err)
-		}
-		return tmp
+		return ast.num
 	case ASTUnaryOp:
 		if ast.op == "-" {
-			return -ev.exec(ast.AST).(int)
+			return fmt.Sprint("-", ev.exec(ast.AST))
 		}
-		return ev.exec(ast.AST)
+		return fmt.Sprint(ev.exec(ast.AST))
 	case ASTBinaryOp:
-		left := ev.exec(ast.left).(int)
-		right := ev.exec(ast.right).(int)
-		switch ast.op {
-		case "+":
-			return left + right
-		case "-":
-			return left - right
-		case "*":
-			return left * right
-		case "/":
-			return left / right
-		default:
-			panic(ast.op)
-		}
+		return fmt.Sprintf("(%v %s %v)", ev.exec(ast.left), ast.op, ev.exec(ast.right))
 	case ASTVariable:
-		tmp := ev.st.Get(ast.name)
-		if tmp == nil || tmp.t != "var" {
-			panic(ast.name)
-		}
-		return tmp.varValue
+		return fmt.Sprintf("%s", ast.name)
 	case ASTStmt:
+		var tmp []string
 		for _, ast := range ast.list {
-			ev.exec(ast)
+			tmp = append(tmp, fmt.Sprintf("%v;", ev.exec(ast)))
 		}
-		return nil
+		return strings.Join(tmp, "\n")
+	case ASTFunction:
+		var tmp1 []string
+		for _, a := range ast._return {
+			tmp1 = append(tmp1, fmt.Sprint(ev.exec(a)))
+		}
+		var tmp2 []string
+		for _, a := range ast._return {
+			tmp2 = append(tmp2, fmt.Sprint(ev.exec(a)))
+		}
+		return fmt.Sprintf("(%v) %s (%v) {\n%v\n}",
+			strings.Join(tmp1, ","),
+			ev.exec(ast.name),
+			strings.Join(tmp2, ","),
+			ev.exec(ast.stmt),
+		)
+	case ASTReturn:
+		var tmp []string
+		for _, ast := range ast.expr {
+			tmp = append(tmp, fmt.Sprintf("%v", ev.exec(ast)))
+		}
+		return fmt.Sprintf("return %v/*:%s*/", strings.Join(tmp, ","), ast.error)
+	case ASTCallFunc:
+		var tmp []string
+		for _, ast := range ast.params {
+			tmp = append(tmp, fmt.Sprintf("%v", ev.exec(ast)))
+		}
+		return fmt.Sprintf("%v(%s)", ev.exec(ast.name), strings.Join(tmp, ","))
+	case ASTString:
+		return "\"" + strings.ReplaceAll(strings.ReplaceAll(ast.s, "\\", "\\\\"), "\"", "\\\"") + "\""
 	case ASTAssign:
-		if ast.isDefined && ast.op != "=" {
-			panic(ast.op)
+		var tmp1 []string
+		var tmp2 []string
+		for _,a:=range ast.left{
+			tmp1=append(tmp1,fmt.Sprintf("%v",ev.exec(a)))
 		}
-		var right []int
-		for _, ast := range ast.right {
-			right = append(right, ev.exec(ast).(int))
+		for _,a:=range ast.right{
+			tmp2=append(tmp2,fmt.Sprintf("%v",ev.exec(a)))
 		}
-		if len(right) == 1 { // exp. var a,b,c=1
-			for i := range ast.left {
-				if ast.isDefined {
-					ev.st.DefinedVar(ast.left[i].name, right[0])
-				} else if ast.op == "=" {
-					ev.st.SetVar(ast.left[i].name, right[0])
-				} else {
-					s := ev.st.Get(ast.left[i].name)
-					switch ast.op {
-					case "+=":
-						s.varValue += right[0]
-					case "-=":
-						s.varValue -= right[0]
-					case "*=":
-						s.varValue *= right[0]
-					case "/=":
-						s.varValue /= right[0]
-					default:
-						panic(ast.op)
-					}
-				}
+		var tmp3 string
+		for i:=range tmp1{
+			if len(tmp2)>i{
+				tmp3+=tmp1[i]+ast.op+tmp2[i]+";\n"
+				continue
 			}
-			return right
+				tmp3+=tmp1[i]+";\n"
 		}
-		if len(ast.left) != len(right) {
-			panic(len(ast.left) - len(right))
-		}
-		for i := range ast.left {
-			if ast.isDefined {
-				ev.st.DefinedVar(ast.left[i].name, right[i])
-			} else if ast.op == "=" {
-				ev.st.SetVar(ast.left[i].name, right[i])
-			} else {
-				s := ev.st.Get(ast.left[i].name)
-				switch ast.op {
-				case "+=":
-					s.varValue += right[i]
-				case "-=":
-					s.varValue -= right[i]
-				case "*=":
-					s.varValue *= right[i]
-				case "/=":
-					s.varValue /= right[i]
-				default:
-					panic(ast.op)
-				}
-			}
-		}
-		return right
-	case ASTLogic:
-		switch ast.op {
-		case "and":
-			left := ev.exec(ast.left).(int)
-			if left == 0 {
-				return 0
-			}
-			return ev.exec(ast.right)
-		case "or":
-			left := ev.exec(ast.left).(int)
-			if left != 0 {
-				return left
-			}
-			return ev.exec(ast.right)
-		case "not":
-			right := ev.exec(ast.right).(int)
-			if right == 0 {
-				return 1
-			}
-			return 0
-		case "<":
-			if ev.exec(ast.left).(int) < ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		case "<=":
-			if ev.exec(ast.left).(int) <= ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		case "==":
-			if ev.exec(ast.left).(int) == ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		case "!=":
-			if ev.exec(ast.left).(int) != ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		case ">":
-			if ev.exec(ast.left).(int) > ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		case ">=":
-			if ev.exec(ast.left).(int) >= ev.exec(ast.right).(int) {
-				return 1
-			}
-			return 0
-		}
-	case ASTEmpty:
-		return nil
+		return tmp3
 	case ASTBranch:
-		if ev.exec(ast.logic).(int) == 0 {
-			return ev.exec(ast.false)
-		} else {
-			return ev.exec(ast.true)
+		if ast.false==nil{
+			return fmt.Sprintf("if%v{\n%v\n}",ev.exec(ast.logic),ev.exec(ast.true))
 		}
-	case ASTFunction: // skip
-		return nil
+		return fmt.Sprintf("if%v{\n%v\n}else{\n%v\n}",ev.exec(ast.logic),ev.exec(ast.true),ev.exec(ast.false))
+	case ASTLogic:
+		if ast.left==nil{
+			return fmt.Sprintf("(%s%v)",ast.op,ev.exec(ast.right))
+		}
+		return fmt.Sprintf("(%v%s%v)",ev.exec(ast.left),ast.op,ev.exec(ast.right))
+	case ASTEmpty: // skip
+		return ""
 	}
 	panic(ast)
 }

@@ -1,47 +1,43 @@
 package main
 
-import (
-	"log"
-)
+import "fmt"
 
-func NewParse(l *Lexer) *Parse {
-	return &Parse{l: l, t: l.GetNextToken()}
+func NewParse(tokens []*Token) *Parse {
+	return &Parse{token: tokens}
 }
 
 type Parse struct {
-	l         *Lexer
-	t         *Token
-	peekToken *Token
+	token []*Token
+	pos   int
 }
 
 func (p *Parse) peek() TokenType {
-	if p.peekToken == nil {
-		p.peekToken = p.l.GetNextToken()
+	if len(p.token) <= p.pos+1 {
+		return TokenEOF
 	}
-	return p.peekToken.Type
+	return p.token[p.pos+1].Type
 }
 
 func (p *Parse) mustEat(t TokenType) string {
-	log.Println(t, p.t)
-	if p.t.Type == t {
-		t := p.t
-		if p.peekToken != nil {
-			p.t, p.peekToken = p.peekToken, nil
-		} else {
-			p.t = p.l.GetNextToken()
+	fmt.Println(t, len(p.token), p.pos, p.token[p.pos])
+	if p.token[p.pos].Type == t {
+		if len(p.token) <= p.pos+1 {
+			fmt.Println("-------EOF--------")
+			return "EOF"
 		}
-		return t.Value
+		p.pos++
+		return p.token[p.pos-1].Value
 	}
-	panic(p.t.Type)
+	panic(p.token[p.pos].Type)
 }
 
 // func (p *Parse) eat(t TokenType) (bool, string) {
-// 	if p.t.Type == t {
-// 		t := p.t
+// 	if p.token[p.pos].Type == t {
+// 		t := p.token[p.pos]
 // 		if p.peekToken != nil {
-// 			p.t, p.peekToken = p.peekToken, nil
+// 			p.token[p.pos], p.peekToken = p.peekToken, nil
 // 		} else {
-// 			p.t = p.l.GetNextToken()
+// 			p.token[p.pos] = p.l.GetNextToken()
 // 		}
 // 		return true, t.Value
 // 	}
@@ -54,7 +50,7 @@ func (p *Parse) parse() AST {
 
 // program : Enter* import stmt_list EOF
 func (p *Parse) program() AST {
-	for p.t.Type == TokenEnter {
+	for p.token[p.pos].Type == TokenEnter {
 		p.mustEat(TokenEnter)
 	}
 	defer p.mustEat(TokenEOF)
@@ -64,10 +60,10 @@ func (p *Parse) program() AST {
 // import : (Import String Enter)*
 func (p *Parse) _import() []ASTImport {
 	var list []ASTImport
-	for p.t.Type == TokenImport {
+	for p.token[p.pos].Type == TokenImport {
 		p.mustEat(TokenImport)
 		list = append(list, ASTImport{p.mustEat(TokenString)})
-		for p.t.Type == TokenEnter {
+		for p.token[p.pos].Type == TokenEnter {
 			p.mustEat(TokenEnter)
 		}
 	}
@@ -81,7 +77,7 @@ func (p *Parse) stmtList() AST {
 	if ast != nil {
 		list = append(list, ast)
 	}
-	for p.t.Type == TokenEnter {
+	for p.token[p.pos].Type == TokenEnter {
 		p.mustEat(TokenEnter)
 		ast = p.stmt()
 		if ast != nil {
@@ -95,21 +91,21 @@ func (p *Parse) stmtList() AST {
 //      | IF logic LBrace stmt_list RBrace _else
 //      | IF logic THEN stmt _else
 //      | function(Function...)
-//      | Return expr (Colon Number)?
-//      | (Var)? (variable (Comma variable)* ASSIGN)+ expr (Comma expr)*
+//      | Return expr (Comma Enter? expr)* (Colon Number)?
+//      | (Var)? variable (Comma variable)* ASSIGN expr (Comma expr)*
 //      | expr
 //      | empty
 func (p *Parse) stmt() AST {
-	if p.t.Type == TokenLBrace {
+	if p.token[p.pos].Type == TokenLBrace {
 		p.mustEat(TokenLBrace)
 		defer p.mustEat(TokenRBrace)
 		return p.stmtList()
 	}
 
-	if p.t.Type == TokenIf {
+	if p.token[p.pos].Type == TokenIf {
 		p.mustEat(TokenIf)
 		logic := p.logic()
-		if p.t.Type == TokenLBrace {
+		if p.token[p.pos].Type == TokenLBrace {
 			p.mustEat(TokenLBrace)
 			stmtList := p.stmtList()
 			p.mustEat(TokenRBrace)
@@ -127,40 +123,47 @@ func (p *Parse) stmt() AST {
 		}
 	}
 
-	if p.t.Type == TokenFunction {
+	if p.token[p.pos].Type == TokenFunction {
 		return p.function()
 	}
 
-	if p.t.Type == TokenReturn {
+	if p.token[p.pos].Type == TokenReturn {
 		p.mustEat(TokenReturn)
-		expr := p.expr()
-		if p.t.Type != TokenColon {
-			return ASTReturn{expr: expr}
+		var exprs []AST
+		exprs=append(exprs,p.expr())
+		for p.token[p.pos].Type==TokenComma{
+			for p.token[p.pos].Type==TokenReturn{
+				p.mustEat(TokenReturn)
+			}
+			exprs=append(exprs,p.expr())
+		}
+		if p.token[p.pos].Type != TokenColon {
+			return ASTReturn{expr: exprs}
 		}
 		p.mustEat(TokenColon)
-		return ASTReturn{expr: expr, error: p.mustEat(TokenNumber)}
+		return ASTReturn{expr: exprs, error: p.mustEat(TokenNumber)}
 	}
 
-	if p.t.Type == TokenID && (p.peek() != TokenComma || p.peek() != TokenAssign) { // expr
+	if p.token[p.pos].Type == TokenID && (p.peek() != TokenComma && p.peek() != TokenAssign) { // expr
 		return p.expr()
 	}
 
-	if p.t.Type == TokenVar || p.t.Type == TokenID {
+	if p.token[p.pos].Type == TokenVar || p.token[p.pos].Type == TokenID {
 		var isDefined bool
-		if p.t.Type == TokenVar {
+		if p.token[p.pos].Type == TokenVar {
 			p.mustEat(TokenVar)
 			isDefined = true
 		}
 		var left []ASTVariable
 		left = append(left, p.variable())
-		for p.t.Type == TokenComma {
+		for p.token[p.pos].Type == TokenComma {
 			p.mustEat(TokenComma)
 			left = append(left, p.variable())
 		}
 		var op = p.mustEat(TokenAssign)
 		var right []AST
 		right = append(right, p.expr())
-		for p.t.Type == TokenComma {
+		for p.token[p.pos].Type == TokenComma {
 			p.mustEat(TokenComma)
 			right = append(right, p.expr())
 		}
@@ -172,64 +175,67 @@ func (p *Parse) stmt() AST {
 		}
 	}
 
-	return nil // ASTEmpty{}
+	return ASTEmpty{}
 }
 
-// function : Function variable LParen params RParen (LParen params RParen)? stmt
+// function : Function variable def_params def_params? LBrace stmt_list RBrace
 func (p *Parse) function() ASTFunction {
 	p.mustEat(TokenFunction)
 	name := p.variable()
-	p.mustEat(TokenLParen)
-	params := p.params()
-	p.mustEat(TokenRParen)
+	params := p.defParams()
 	var _return []ASTVariable
-	if p.t.Type == TokenLParen {
-		p.mustEat(TokenLParen)
-		_return = p.params()
-		p.mustEat(TokenRParen)
+	if p.token[p.pos].Type == TokenLParen {
+		_return = p.defParams()
 	}
-	return ASTFunction{
+	p.mustEat(TokenLBrace)
+	var ast= ASTFunction{
 		name:    name,
 		params:  params,
-		stmt:    p.stmt(),
+		stmt:    p.stmtList(),
 		_return: _return,
 	}
+	p.mustEat(TokenRBrace)
+	return ast
 }
 
-// def_params : (ID (Comma Enter*)?)*
+// def_params : LParen (ID type (Comma Enter*)?)* RParen
 func (p *Parse) defParams() []ASTVariable {
+	p.mustEat(TokenLParen)
 	var list []ASTVariable
-	for p.t.Type == TokenID {
+	for p.token[p.pos].Type == TokenID {
 		list = append(list, p.variable())
-		if p.t.Type == TokenComma {
+		if p.token[p.pos].Type == TokenComma {
 			p.mustEat(TokenComma)
-			for p.t.Type == TokenEnter {
+			for p.token[p.pos].Type == TokenEnter {
 				p.mustEat(TokenEnter)
 			}
 		}
 	}
+	p.mustEat(TokenRParen)
 	return list
 }
 
-// params : (ID (Comma Enter*)?)*
-func (p *Parse) params() []ASTVariable {
-	var list []ASTVariable
-	for p.t.Type == TokenID {
-		list = append(list, p.variable())
-		if p.t.Type == TokenComma {
+// params : LParen (expr (Comma Enter*)?)* RParen
+func (p *Parse) params() []AST {
+	p.mustEat(TokenLParen)
+	var list []AST
+	for p.token[p.pos].Type != TokenRParen {
+		list = append(list, p.expr())
+		if p.token[p.pos].Type == TokenComma {
 			p.mustEat(TokenComma)
-			for p.t.Type == TokenEnter {
+			for p.token[p.pos].Type == TokenEnter {
 				p.mustEat(TokenEnter)
 			}
 		}
 	}
+	p.mustEat(TokenRParen)
 	return list
 }
 
 // _else : ELSE stmt
 //       | empty
 func (p *Parse) _else() AST {
-	if p.t.Type != TokenElse {
+	if p.token[p.pos].Type != TokenElse {
 		return nil
 	}
 	p.mustEat(TokenElse)
@@ -239,7 +245,7 @@ func (p *Parse) _else() AST {
 // variable : ID (Dot ID)*
 func (p *Parse) variable() ASTVariable {
 	var name = p.mustEat(TokenID)
-	for p.t.Type == TokenDot {
+	for p.token[p.pos].Type == TokenDot {
 		name += p.mustEat(TokenDot)
 		name += p.mustEat(TokenID)
 	}
@@ -257,20 +263,15 @@ func (p *Parse) variable() ASTVariable {
 // op_8 : ||
 // op_9 : = /= *= %= += -= <<= >>= &= ^= |=
 
-// expr : op_8 (Comma op_8)*
-func (p *Parse) expr() ASTExpr {
-	var list ASTExpr
-	list.list = []AST{p.op8()}
-	for p.t.Type == TokenComma {
-		list.list = append(list.list, p.op8())
-	}
-	return list
+// expr : op_8
+func (p *Parse) expr() AST {
+	return p.op8()
 }
 
 // op_8 : op_7 (Or op_7)*
 func (p *Parse) op8() AST {
 	var left = p.op7()
-	for p.t.Type == TokenOr {
+	for p.token[p.pos].Type == TokenOr {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(TokenOr),
@@ -283,7 +284,7 @@ func (p *Parse) op8() AST {
 // op_7 : op_6 (And op_6)*
 func (p *Parse) op7() AST {
 	var left = p.op6()
-	for p.t.Type == TokenAnd {
+	for p.token[p.pos].Type == TokenAnd {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(TokenAnd),
@@ -296,7 +297,7 @@ func (p *Parse) op7() AST {
 // op_6 : op_5 (Compare op_5)*
 func (p *Parse) op6() AST {
 	var left = p.op5()
-	for p.t.Type == TokenCompare {
+	for p.token[p.pos].Type == TokenCompare {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(TokenCompare),
@@ -309,10 +310,10 @@ func (p *Parse) op6() AST {
 // op_5 : op_4 ((BitOp | OpAnd) op_4)*
 func (p *Parse) op5() AST {
 	var left = p.op4()
-	for p.t.Type == TokenOpBit || p.t.Type == TokenOpAnd {
+	for p.token[p.pos].Type == TokenOpBit || p.token[p.pos].Type == TokenOpAnd {
 		left = ASTBinaryOp{
 			left:  left,
-			op:    p.mustEat(p.t.Type),
+			op:    p.mustEat(p.token[p.pos].Type),
 			right: p.op4(),
 		}
 	}
@@ -322,10 +323,10 @@ func (p *Parse) op5() AST {
 // op_4 : op_3 ((Plus | Minus) op_3)*
 func (p *Parse) op4() AST {
 	var left = p.op3()
-	for p.t.Type == TokenPlus || p.t.Type == TokenMinus {
+	for p.token[p.pos].Type == TokenPlus || p.token[p.pos].Type == TokenMinus {
 		left = ASTBinaryOp{
 			left:  left,
-			op:    p.mustEat(p.t.Type),
+			op:    p.mustEat(p.token[p.pos].Type),
 			right: p.op3(),
 		}
 	}
@@ -335,10 +336,10 @@ func (p *Parse) op4() AST {
 // op_3 : op_2 ((Mul | Div) op_2)*
 func (p *Parse) op3() AST {
 	var left = p.op2()
-	for p.t.Type == TokenMul || p.t.Type == TokenDiv {
+	for p.token[p.pos].Type == TokenMul || p.token[p.pos].Type == TokenDiv {
 		left = ASTBinaryOp{
 			left:  left,
-			op:    p.mustEat(p.t.Type),
+			op:    p.mustEat(p.token[p.pos].Type),
 			right: p.op2(),
 		}
 	}
@@ -348,7 +349,7 @@ func (p *Parse) op3() AST {
 // op_2 : op_1 (As op_1)*
 func (p *Parse) op2() AST {
 	var left = p.op1()
-	for p.t.Type == TokenAs {
+	for p.token[p.pos].Type == TokenAs {
 		left = ASTBinaryOp{
 			left:  left,
 			op:    p.mustEat(TokenAs),
@@ -358,39 +359,45 @@ func (p *Parse) op2() AST {
 	return left
 }
 
-// op_1 : (Mul | Minus | OpAnd | UnaryOp)* factor
+// op_1 : (Mul | Minus | OpAnd | UnaryOp) op_1 | factor
 func (p *Parse) op1() AST {
-	var ast AST
-	var tmp = ast
-	ast = tmp
-	for p.t.Type == TokenMul || p.t.Type == TokenMinus || p.t.Type == TokenOpAnd || p.t.Type == TokenUnaryOp {
-		ast = ASTUnaryOp{
-			op:  p.mustEat(p.t.Type),
-			AST: ast,
+	var t = p.token[p.pos].Type
+	if t == TokenMul || t == TokenMinus || t == TokenOpAnd || t == TokenUnaryOp {
+		return ASTUnaryOp{
+			op:  p.mustEat(t),
+			AST: p.op1(),
 		}
 	}
-	tmp = p.factor()
-	return ast
+	return p.factor()
 }
 
-// factor : Number | LParen op_8 RParen | variable ( LParam params RParen)
+// factor : Number | String | LParen op_8 RParen | variable params?
 func (p *Parse) factor() AST {
-	switch p.t.Type {
+	switch p.token[p.pos].Type {
 	case TokenNumber:
 		return ASTNumber{num: p.mustEat(TokenNumber)}
+	case TokenString:
+		return ASTString{s: p.mustEat(TokenString)}
 	case TokenLParen:
 		p.mustEat(TokenLParen)
 		defer p.mustEat(TokenRParen)
 		return p.op8()
 	default:
-		return p.variable()
+		var tmp = p.variable()
+		if p.token[p.pos].Type == TokenLParen {
+			return ASTCallFunc{
+				name:   tmp,
+				params: p.params(),
+			}
+		}
+		return tmp
 	}
 }
 
 // logic(logic_or_slower) : logic_and_slower (OrSlower logic_and_slower)*
 func (p *Parse) logic() AST {
 	var left = p.logicAndSlower()
-	for p.t.Type == TokenOrSlower {
+	for p.token[p.pos].Type == TokenOrSlower {
 		left = ASTLogic{
 			left:  left,
 			op:    p.mustEat(TokenOrSlower),
@@ -403,7 +410,7 @@ func (p *Parse) logic() AST {
 // logic_and_slower : logic_not_slower (AndSlower logic_not_slower)*
 func (p *Parse) logicAndSlower() AST {
 	var left = p.logicNotSlower()
-	for p.t.Type == TokenAndSlower {
+	for p.token[p.pos].Type == TokenAndSlower {
 		left = ASTLogic{
 			left:  left,
 			op:    p.mustEat(TokenAndSlower),
@@ -415,7 +422,7 @@ func (p *Parse) logicAndSlower() AST {
 
 // logic_not_slower : LParen logic RParen | NotSlower expr | expr
 func (p *Parse) logicNotSlower() AST {
-	switch p.t.Type {
+	switch p.token[p.pos].Type {
 	case TokenLParen:
 		p.mustEat(TokenLParen)
 		defer p.mustEat(TokenRParen)
