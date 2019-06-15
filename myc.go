@@ -17,14 +17,14 @@ func main() {
 	fmt.Println("lexer success:", tokens)
 	// return
 	p := NewParse(tokens)
-	f, err := os.Create("_test01.c")
+	f, err := os.Create("tmp/test.go")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	defer f.Close()
 
-	ev := NewExportCVisitor(p.parse(), f)
+	ev := NewExportGoVisitor(p.parse(), f)
 	// ev := NewExecVisitor(p.parse())
 	ev.Exec()
 	log.Printf("%v", ev.st)
